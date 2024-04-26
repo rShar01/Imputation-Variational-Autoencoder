@@ -72,7 +72,7 @@ if __name__ == "__main__":
     n,d = df.shape
     df = df.sample(n=n)
 
-    y = df["IsFraud"]
+    y = df["IsFraud"].to_numpy()
     exclude_columns = ["id", "Time", "Transaction_Amount", "IsFraud"]
     X = df.drop(exclude_columns, axis=1)
     
@@ -88,22 +88,48 @@ if __name__ == "__main__":
     model = AutoEncoder(input_dim, latent_dim)
     
     # Try with unmasked data for now
-    X_subset = X_scaled[:1000]
-    X_subset = torch.Tensor(X_subset).float()
-    print("input init:\n ", X_subset[0:3])
+    num_points = 200
+    is_fraud_idx = y == 1
+    not_fraud_idx = y == 0
 
-    train(model, X_subset, X_subset, epochs=600)
-    # subset = X_scaled[0:5,:]
-    # subset = torch.tensor(subset).float()
-    # subset_masked = mask_features(df = subset, n = 5, random = True, value = 0) # Mask random features
-    
-    # train(model, subset_masked, subset)
-    
-    preds = model(X_subset[0:3])
-    print("output after: \n",preds)
-    print(f"MSE: {torch.pow(X_subset[0:3]-preds, 2).sum()/3}")
+    X_fraud = X_scaled[is_fraud_idx]
+    X_not_fraud = X_scaled[not_fraud_idx]
 
-    
-    
-# random_mask_df = mask_features(df = subset, n = 5, random = True, value = 9999)
-# random_mask_df
+    X_fraud_tensor = torch.tensor(X_fraud[:num_points]).float()
+    X_not_fraud_tensor = torch.tensor(X_not_fraud[:num_points]).float()
+
+    fraud_model = AutoEncoder(input_dim, latent_dim)
+    not_fraud_model = AutoEncoder(input_dim, latent_dim)
+
+    train(fraud_model, X_fraud_tensor, X_fraud_tensor, epochs=500)
+    train(not_fraud_model, X_not_fraud_tensor, X_not_fraud_tensor, epochs=500)
+
+    print("Evaluating non fraud reconstruction")
+    for i in range(3):
+        point = torch.tensor(X_not_fraud[num_points+i]).float()
+        # print(point)
+        # print(point.shape)
+
+        not_fraud_recon = not_fraud_model(point)
+        not_fraud_loss = ((not_fraud_recon - point)**2).sum()
+
+        fraud_recon = fraud_model(point)
+        fraud_loss = ((fraud_recon- point)**2).sum()
+
+        print(f"\tpoint {i}:")
+        print(f"\t\tfraud loss:     {fraud_loss}")
+        print(f"\t\tnot fraud loss: {not_fraud_loss}")
+
+    print("Evaluating fraud reconstruction")
+    for i in range(3):
+        point = torch.tensor(X_fraud[num_points+i]).float()
+
+        not_fraud_recon = not_fraud_model(point)
+        not_fraud_loss = ((not_fraud_recon - point)**2).sum()
+
+        fraud_recon = fraud_model(point)
+        fraud_loss = ((fraud_recon- point)**2).sum()
+
+        print(f"\tpoint {i}:")
+        print(f"\t\tfraud loss:     {fraud_loss}")
+        print(f"\t\tnot fraud loss: {not_fraud_loss}")
