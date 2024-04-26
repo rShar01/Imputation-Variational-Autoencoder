@@ -15,7 +15,7 @@ class Decoder(nn.Module):
             )
         self.lin2 = nn.Sequential(
                 nn.Linear(hidden_dim, out_dim),
-                nn.Sigmoid()
+                # nn.Sigmoid()
             )
 
 
