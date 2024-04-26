@@ -41,9 +41,11 @@ class Encoder(nn.Module):
         self.kl = 0
 
     def forward(self, x):
-        print(x.shape)
-        n, d = x.shape
-        print(f"n: {n}")
+        # print(x.shape)
+        # n, d = x.shape
+        # print(f"n: {n}")
+        
+        n = x.shape[0]
 
         latents = self.latentize(x)
 

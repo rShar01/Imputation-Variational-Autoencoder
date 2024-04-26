@@ -13,7 +13,7 @@ class AutoEncoder(nn.Module):
         self.decoder = Decoder(latent_dim, d)
 
     def forward(self, x):
-        z = self.encoder.forward(x)
-        return self.decoder.forward(z)
+        z = self.encoder(x)
+        return self.decoder(z)
 
 
