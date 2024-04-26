@@ -54,7 +54,7 @@ class Encoder(nn.Module):
 
         random_point = self.normal.sample(sample_shape=(n,self.out))
         z = mu + sigma*random_point
-        self.kl = (sigma**2 + mu**2 - tlog(sigma) - 1/2).sum()
+        self.kl += (sigma**2 + mu**2 - tlog(sigma) - 1/2).sum()
         return z
 
 
