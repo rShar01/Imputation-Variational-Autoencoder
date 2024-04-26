@@ -13,11 +13,13 @@ class Encoder(nn.Module):
     def __init__(self, in_dim, out_dim):
         super().__init__()
 
-        nn_hidden = 15
+        nn_hidden = 45
         self.out = out_dim
 
         self.latentize = nn.Sequential(
             nn.Linear(in_dim, nn_hidden),
+            nn.LeakyReLU(),
+            nn.Linear(nn_hidden, nn_hidden),
             nn.LeakyReLU(),
         )
 
@@ -51,7 +53,8 @@ class Encoder(nn.Module):
         z = mu + sigma*random_point
         # self.kl += (sigma**2 + mu**2 - tlog(sigma) - 1/2).sum()
         # self.kl += (1 - sigma**2 - mu**2 + tlog(sigma)**2).sum()
-        self.kl =  - 0.5 * tsum(1+ tlog(sigma) - mu**2 - sigma)
+        # self.kl += -0.5*(1 - sigma - mu**2 + tlog(sigma)**2).sum()
+        self.kl +=  - 0.5 * tsum(1+ tlog(sigma) - mu**2 - sigma)
         return z
 
 

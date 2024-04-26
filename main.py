@@ -48,8 +48,9 @@ def train(autoencoder: AutoEncoder, masked_data: pd.DataFrame, unmasaked_data: p
             autoencoder.encoder.kl = 0
 
             X_hat = autoencoder(X_mask_batch)
-            # loss = ((X_unmask_batch - X_hat)**2).sum() + autoencoder.encoder.kl
-            loss = ((X_unmask_batch - X_hat)**2).sum() 
+            loss = ((X_unmask_batch - X_hat)**2).sum() + autoencoder.encoder.kl
+            loss = loss / batch_size
+            # loss = ((X_unmask_batch - X_hat)**2).sum() 
             losses.append(loss.item())
 
             loss.backward()
@@ -57,7 +58,9 @@ def train(autoencoder: AutoEncoder, masked_data: pd.DataFrame, unmasaked_data: p
     
         avg_los_epoch.append(sum(losses)/len(losses))
             
-    print(avg_los_epoch)
+    # print(avg_los_epoch)
+    print(f"Staring avg losses: {avg_los_epoch[0]}, {avg_los_epoch[1]}, {avg_los_epoch[2]}")
+    print(f"Ending avg loss: {avg_los_epoch[-1]}, {avg_los_epoch[-2]}, {avg_los_epoch[-3]}")
     return autoencoder
 
 if __name__ == "__main__":
@@ -74,29 +77,31 @@ if __name__ == "__main__":
     X = df.drop(exclude_columns, axis=1)
     
     # Scale inputs
-    scalar = StandardScaler()
-    X_scaled = scalar.fit_transform(X)
+    # scalar = StandardScaler()
+    # X_scaled = scalar.fit_transform(X)
+    X_scaled = X.to_numpy()
     
     n, input_dim = X_scaled.shape
-    latent_dim = 6
+    latent_dim = 10
     
     # Instantiate VAE
     model = AutoEncoder(input_dim, latent_dim)
     
     # Try with unmasked data for now
     X_subset = X_scaled[:1000]
-    print(f"Has Fraud: {(X_subset[:, -1] == 1).sum()}")
     X_subset = torch.Tensor(X_subset).float()
     print("input init:\n ", X_subset[0:3])
 
-    train(model, X_subset, X_subset, epochs=30)
+    train(model, X_subset, X_subset, epochs=600)
     # subset = X_scaled[0:5,:]
     # subset = torch.tensor(subset).float()
     # subset_masked = mask_features(df = subset, n = 5, random = True, value = 0) # Mask random features
     
     # train(model, subset_masked, subset)
     
-    print("output after: \n", model(X_subset[0:3]))
+    preds = model(X_subset[0:3])
+    print("output after: \n",preds)
+    print(f"MSE: {torch.pow(X_subset[0:3]-preds, 2).sum()/3}")
 
     
     
