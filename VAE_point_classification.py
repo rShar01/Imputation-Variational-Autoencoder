@@ -45,8 +45,10 @@ if __name__ == "__main__":
     fraud_model = AutoEncoder(input_dim, latent_dim)
     not_fraud_model = AutoEncoder(input_dim, latent_dim)
 
-    fraud_model = train(fraud_model, X_fraud_tensor, X_fraud_tensor, epochs=500)
-    not_fraud_model = train(not_fraud_model, X_not_fraud_tensor, X_not_fraud_tensor, epochs=500)
+    print(f"fraud={np.sum(y==1)}\t not={np.sum(y==0)}")
+
+    fraud_model = train(fraud_model, X_fraud_tensor, X_fraud_tensor, epochs=500, max_N=250)
+    not_fraud_model = train(not_fraud_model, X_not_fraud_tensor, X_not_fraud_tensor, epochs=500, max_N=250)
 
     print("Evaluating non fraud reconstruction")
     for i in range(3):

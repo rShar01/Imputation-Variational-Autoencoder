@@ -25,7 +25,8 @@ def mask_features(df, n, value, random):
     return df_copy
 
 # Training process
-def train(autoencoder: AutoEncoder, masked_data: pd.DataFrame, unmasaked_data: pd.DataFrame, epochs=100):
+# Trains on all points in masked_data + unmasked data unless max_N is specified
+def train(autoencoder: AutoEncoder, masked_data: pd.DataFrame, unmasaked_data: pd.DataFrame, epochs=100, max_N=None):
     opt = torch.optim.Adam(autoencoder.parameters())
     batch_size = 10
     n, d = unmasaked_data.shape
@@ -38,7 +39,9 @@ def train(autoencoder: AutoEncoder, masked_data: pd.DataFrame, unmasaked_data: p
         losses = []
 
         perm_ordering = torch.randperm(n) # potentially control for randomness here
-        for i in range(0, n, batch_size):
+        total = n if max_N is None else max_N
+
+        for i in range(0, total, batch_size):
             curr_indices = perm_ordering[i:i+batch_size]
             X_mask_batch = masked_data[curr_indices]
             X_unmask_batch = masked_data[curr_indices]
