@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as func
 import torch.distributions as dists
 
-from torch import log as tlog
+from torch import log as tlog, sum as tsum
 
 
 class Encoder(nn.Module):
@@ -13,28 +13,23 @@ class Encoder(nn.Module):
     def __init__(self, in_dim, out_dim):
         super().__init__()
 
-        nn_transform_dim = 100
-        nn_hidden = 75
-        
+        nn_hidden = 15
         self.out = out_dim
 
-        # 0.75 arbitrary right now but prob good idea for smaller layer
         self.latentize = nn.Sequential(
             nn.Linear(in_dim, nn_hidden),
-            nn.ReLU(),
-            nn.Linear(nn_hidden, nn_transform_dim),
-            nn.ReLU()
+            nn.LeakyReLU(),
         )
 
         self.latent_mean = nn.Sequential(
-                nn.Linear(nn_transform_dim, out_dim),
-                nn.Tanh()
+                nn.Linear(nn_hidden, out_dim),
+                # nn.Tanh()
             )
         
         # Assuming diagonal variances
         self.latent_var = nn.Sequential(
-                nn.Linear(nn_transform_dim, out_dim),
-                nn.ReLU() 
+                nn.Linear(nn_hidden, out_dim),
+                nn.Sigmoid()  # var should be non-neg
             )
 
         self.normal = dists.Normal(0,1)
@@ -54,7 +49,9 @@ class Encoder(nn.Module):
 
         random_point = self.normal.sample(sample_shape=(n,self.out))
         z = mu + sigma*random_point
-        self.kl += (sigma**2 + mu**2 - tlog(sigma) - 1/2).sum()
+        # self.kl += (sigma**2 + mu**2 - tlog(sigma) - 1/2).sum()
+        # self.kl += (1 - sigma**2 - mu**2 + tlog(sigma)**2).sum()
+        self.kl =  - 0.5 * tsum(1+ tlog(sigma) - mu**2 - sigma)
         return z
 
 

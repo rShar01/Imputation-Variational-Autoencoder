@@ -8,7 +8,7 @@ class Decoder(nn.Module):
         self.out = out_dim
 
         # two linear layers good? assuming 1.1*in smaller than out
-        hidden_dim = int(1.1*in_dim)
+        hidden_dim = int(15)
         self.lin1 = nn.Sequential(
                 nn.Linear(in_dim, hidden_dim),
                 nn.ReLU()

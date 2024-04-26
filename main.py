@@ -26,15 +26,18 @@ def mask_features(df, n, value, random):
     return df_copy
 
 # Training process
-def train(autoencoder, masked_data: pd.DataFrame, unmasaked_data: pd.DataFrame, epochs=100):
+def train(autoencoder: AutoEncoder, masked_data: pd.DataFrame, unmasaked_data: pd.DataFrame, epochs=100):
     opt = torch.optim.Adam(autoencoder.parameters())
     batch_size = 10
     n, d = unmasaked_data.shape
 
+    avg_los_epoch = []
     for epoch in tqdm(range(epochs)):
         # x = x.to(device) # To format tensors for the GPU
         # Potentially try torch.nn.BCEWithLogitsLoss()
         
+        losses = []
+
         perm_ordering = torch.randperm(n) # potentially control for randomness here
         for i in range(0, n, batch_size):
             curr_indices = perm_ordering[i:i+batch_size]
@@ -45,10 +48,16 @@ def train(autoencoder, masked_data: pd.DataFrame, unmasaked_data: pd.DataFrame, 
             autoencoder.encoder.kl = 0
 
             X_hat = autoencoder(X_mask_batch)
-            loss = ((X_unmask_batch - X_hat)**2).sum() + autoencoder.encoder.kl
+            # loss = ((X_unmask_batch - X_hat)**2).sum() + autoencoder.encoder.kl
+            loss = ((X_unmask_batch - X_hat)**2).sum() 
+            losses.append(loss.item())
+
             loss.backward()
             opt.step()
+    
+        avg_los_epoch.append(sum(losses)/len(losses))
             
+    print(avg_los_epoch)
     return autoencoder
 
 if __name__ == "__main__":
@@ -56,6 +65,10 @@ if __name__ == "__main__":
 
     df = pd.read_csv("data/credit-card-train.csv")
     df.reset_index(drop=True, inplace=True)
+
+    n,d = df.shape
+    df = df.sample(n=n)
+
     y = df["IsFraud"]
     exclude_columns = ["id", "Time", "Transaction_Amount", "IsFraud"]
     X = df.drop(exclude_columns, axis=1)
@@ -65,27 +78,25 @@ if __name__ == "__main__":
     X_scaled = scalar.fit_transform(X)
     
     n, input_dim = X_scaled.shape
-    latent_dim = 10
+    latent_dim = 6
     
     # Instantiate VAE
     model = AutoEncoder(input_dim, latent_dim)
     
     # Try with unmasked data for now
-    X_subset = X_scaled[:300]
+    X_subset = X_scaled[:1000]
+    print(f"Has Fraud: {(X_subset[:, -1] == 1).sum()}")
     X_subset = torch.Tensor(X_subset).float()
     print("input init:\n ", X_subset[0:3])
-    print("output init: ", model(X_subset[0:3]))
-    print(((X_subset[0:3] - model(X_subset[0:3]))**2).sum() + model.encoder.kl)
 
-    train(model, X_subset, X_subset, epochs=100)
+    train(model, X_subset, X_subset, epochs=30)
     # subset = X_scaled[0:5,:]
     # subset = torch.tensor(subset).float()
     # subset_masked = mask_features(df = subset, n = 5, random = True, value = 0) # Mask random features
     
     # train(model, subset_masked, subset)
     
-    print("output after: ", model(X_subset[0:3]))
-    print(((X_subset[0:3] - model(X_subset[0:3]))**2).sum() + model.encoder.kl)
+    print("output after: \n", model(X_subset[0:3]))
 
     
     
