@@ -32,59 +32,80 @@ if __name__ == "__main__":
     model = AutoEncoder(input_dim, latent_dim)
     
     # Try with unmasked data for now
-    num_points = 1000
+    num_points = 10000
     is_fraud_idx = y == 1
     not_fraud_idx = y == 0
 
     X_fraud = X_scaled[is_fraud_idx]
     X_not_fraud = X_scaled[not_fraud_idx]
 
-    X_fraud_tensor = torch.tensor(X_fraud[:num_points]).float()
-    X_not_fraud_tensor = torch.tensor(X_not_fraud[:num_points]).float()
+    X_fraud_tensor_training = torch.tensor(X_fraud[:200]).float()
+    X_fraud_tensor_testing = torch.tensor(X_fraud[200:]).float()
+    X_not_fraud_tensor_training = torch.tensor(X_not_fraud[:num_points]).float()
+    X_not_fraud_tensor_testing = torch.tensor(X_not_fraud[num_points:num_points + 50]).float()
 
-    X_fraud_tensor_masked = mask_features(X_fraud_tensor, 5, 0, random = False)
-    X_not_fraud_tensor_masked = mask_features(X_not_fraud_tensor, 5, 0, random = False)
+    X_fraud_tensor_masked_training = mask_features(X_fraud_tensor_training, 5, 0, random = False)
+    X_fraud_tensor_masked_testing = mask_features(X_fraud_tensor_testing, 5, 0, random = False)
+    X_not_fraud_tensor_masked_training = mask_features(X_not_fraud_tensor_training, 5, 0, random = False)
+    X_not_fraud_tensor_masked_testing = mask_features(X_not_fraud_tensor_testing, 5, 0, random = False)
 
     fraud_model = AutoEncoder(input_dim, latent_dim)
     not_fraud_model = AutoEncoder(input_dim, latent_dim)
+    full_model = AutoEncoder(input_dim, latent_dim)
 
     print(f"fraud={np.sum(y==1)}\t not={np.sum(y==0)}")
 
-    fraud_model = train(fraud_model, X_fraud_tensor_masked, X_fraud_tensor, epochs=1000, max_N=None)
-    not_fraud_model = train(not_fraud_model, X_not_fraud_tensor_masked, X_not_fraud_tensor, epochs=1000, max_N=None)
+    fraud_model = train(fraud_model, X_fraud_tensor_masked_training, X_fraud_tensor_training, epochs=1000, max_N=None)
+    not_fraud_model = train(not_fraud_model, X_not_fraud_tensor_masked_training, X_not_fraud_tensor_training, epochs=1000, max_N=None)
+    full_model = train(full_model, torch.vstack((X_fraud_tensor_masked_training,X_not_fraud_tensor_masked_training)), torch.vstack((X_fraud_tensor_training,X_not_fraud_tensor_training)), epochs = 1000, max_N = None)
+
+
+
+
+
+
+
 
 
 
     print("Evaluating non fraud reconstruction")
-    for i in range(3):
-        point_unmasked = torch.tensor(X_not_fraud[num_points + i]).float()
-        point_masked = mask_features(point_unmasked.unsqueeze(0), 5, 0, random = False)
+    not_fraud_recon = not_fraud_model(X_not_fraud_tensor_masked_testing)
+    not_fraud_loss = ((not_fraud_recon - X_not_fraud_tensor_testing)**2).sum()
+    not_fraud_loss = not_fraud_loss / X_not_fraud_tensor_testing.shape[0]
+    # print(f"\t\tnot fraud loss: {not_fraud_loss.sum(dim = 0)}")
 
-        not_fraud_recon = not_fraud_model(point_masked)
-        # not_fraud_loss = ((not_fraud_recon - point_unmasked)**2).sum()
+    # print("\tReconstructed masked point:")
+    # print(not_fraud_recon)
+    # print("\tInput point:")
+    # print(point_unmasked)
 
-        # print(f"\tpoint {i}:")
-        # # print(f"\t\tfraud loss:     {fraud_loss}")
-        # print(f"\t\tnot fraud loss: {not_fraud_loss}")
-
-        print("\tReconstructed masked point:")
-        print(not_fraud_recon)
-        print("\tInput point:")
-        print(point_unmasked)
 
     print("Evaluating fraud reconstruction")
-    for i in range(3):
-        point_unmasked = torch.tensor(X_fraud[num_points + i]).float()
-        point_masked = mask_features(point_unmasked.unsqueeze(0), 5, 0, random = False)
+    fraud_recon = fraud_model(X_fraud_tensor_masked_testing)
+    fraud_loss = ((fraud_recon - X_fraud_tensor_testing)**2).sum()
+    fraud_loss = fraud_loss / X_fraud_tensor_testing.shape[0]
 
-        fraud_recon = fraud_model(point_masked)
-        # fraud_loss = ((fraud_recon- point_unmasked)**2).sum()
+    print("Total loss on pair of models: " + str((fraud_loss + not_fraud_loss) / 2))
 
-        # print(f"\tpoint {i}:")
-        # print(f"\t\tfraud loss:     {fraud_loss}")
-        # # print(f"\t\tnot fraud loss: {not_fraud_loss}")
+    # fraud_loss = ((fraud_recon- X_fraud_tensor_testing)**2).sum()
 
-        print("\tReconstructed masked point:")
-        print(fraud_recon)
-        print("\tInput point:")
-        print(point_unmasked)
+    # print(f"\t\tfraud loss:     {fraud_loss}")
+
+    # print("\tReconstructed masked point:")
+    # print(fraud_recon)
+    # print("\tInput point:")
+    # print(point_unmasked)
+
+    print("Evaluating total reconstruction")
+    full_recon = full_model(torch.vstack((X_fraud_tensor_masked_testing,X_not_fraud_tensor_masked_testing)))
+    full_loss = ((full_recon - torch.vstack((X_fraud_tensor_testing,X_not_fraud_tensor_testing)))**2).sum()
+    full_loss = full_loss / torch.vstack((X_fraud_tensor_testing,X_not_fraud_tensor_testing)).shape[0]
+
+    print("Total loss on full model: " + str(full_loss))
+    
+
+    print("Average variance of pairwise models: ")
+    print(torch.mean(torch.var((fraud_recon - X_fraud_tensor_testing), dim = 0)/2 + torch.var((not_fraud_recon - X_not_fraud_tensor_testing), dim = 0)/2))
+
+    print("Average variance of full model: ")
+    print(torch.mean(torch.var((full_recon - torch.vstack((X_fraud_tensor_testing,X_not_fraud_tensor_testing))), dim = 0)))
