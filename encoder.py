@@ -20,7 +20,7 @@ class Encoder(nn.Module):
             nn.Linear(in_dim, nn_hidden),
             nn.LeakyReLU(),
             nn.Linear(nn_hidden, nn_hidden),
-            nn.LeakyReLU(),
+            nn.LeakyReLU()
         )
 
         self.latent_mean = nn.Sequential(

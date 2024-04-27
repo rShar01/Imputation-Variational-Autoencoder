@@ -14,7 +14,7 @@ class Decoder(nn.Module):
                 nn.LeakyReLU()
             )
         self.lin2 = nn.Sequential(
-                nn.Linear(hidden_dim, out_dim),
+                nn.Linear(hidden_dim, out_dim)
                 # nn.Sigmoid()
             )
 
