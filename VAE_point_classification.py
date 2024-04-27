@@ -6,7 +6,7 @@ import argparse
 
 from sklearn.preprocessing import StandardScaler
 from auto_encoder import AutoEncoder
-from training_utils import train, initialize_weights
+from training_utils import train, mask_features, mask_index
 
 
 def parser():
@@ -19,7 +19,9 @@ def parser():
 if __name__ == "__main__":
     args = parser()
     # torch.manual_seed(42)
+    # -- hyperparams -- 
     latent_dim = 10
+    epochs = 10
 
     df = pd.read_csv("data/credit-card-train.csv")
     df_test = pd.read_csv("data/credit-card-test.csv")
@@ -30,18 +32,24 @@ if __name__ == "__main__":
     n,d = df.shape
     df = df.sample(n=n) 
 
-    # train on all features
+    num_masked_feat = 5
+    # mask_idx = [3, 8] # arbitrary, maybe change in experiments?
+    mask_idx = torch.randperm(d-1)[:num_masked_feat]
 
+    # train on all features
     all_feat_train_df = df.copy()
     all_feat_train_df["IsFraud"] = -1
     all_feat_train_tens = torch.tensor(all_feat_train_df.to_numpy()).float()
+    # masked_all_feat_train = mask_features(all_feat_train_tens, num_masked_feat, 0, False, avoid_last=True)
+    masked_all_feat_train = mask_index(all_feat_train_tens, mask_idx, 0)
+
     real_data = torch.tensor(df.iloc[:1000].to_numpy()).float()
 
     model = AutoEncoder(d, latent_dim)
     # with torch.no_grad():
     #     initialize_weights(model)
 
-    model = train(model, all_feat_train_tens, real_data, epochs=500, max_N=2000)
+    model = train(model, masked_all_feat_train, real_data, epochs=epochs, max_N=2000)
 
     eval_num = 100
     correct = 0
@@ -80,15 +88,19 @@ if __name__ == "__main__":
     X_not_fraud = X[not_fraud_idx]
 
     X_fraud_tensor = torch.tensor(X_fraud[:num_fraud_keep]).float()
+    masked_fraud_tens = mask_index(X_fraud_tensor, mask_idx, 0)
+    # masked_fraud_tens = mask_features(X_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
     X_not_fraud_tensor = torch.tensor(X_not_fraud[:num_not_fraud_keep]).float()
+    masked_not_fraud_tens = mask_index(X_not_fraud_tensor, mask_idx, 0)
+    # masked_not_fraud_tens = mask_features(X_not_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
 
     fraud_model = AutoEncoder(input_dim, latent_dim)
     # initialize_weights(fraud_model)
     not_fraud_model = AutoEncoder(input_dim, latent_dim)
     # initialize_weights(not_fraud_model)
 
-    fraud_model = train(fraud_model, X_fraud_tensor, X_fraud_tensor, epochs=500, max_N=250)
-    not_fraud_model = train(not_fraud_model, X_not_fraud_tensor, X_not_fraud_tensor, epochs=500, max_N=250)
+    fraud_model = train(fraud_model, masked_fraud_tens, X_fraud_tensor, epochs=epochs, max_N=250)
+    not_fraud_model = train(not_fraud_model, masked_not_fraud_tens, X_not_fraud_tensor, epochs=epochs, max_N=250)
 
     if args.display_errors:
         print("Evaluating non fraud reconstruction")
@@ -122,14 +134,15 @@ if __name__ == "__main__":
             print(f"\t\tnot fraud loss: {not_fraud_loss}")
 
 
-    # fraud cases
-    # eval full model 
-    X_fraud_with_y = np.c_[X_fraud[0 : num_fraud_keep, :], -1*np.ones(num_fraud_keep)]
+    # --  fraud cases --
+    # eval full model, fuck it try on every point
+    X_fraud_with_y = np.c_[X_fraud, -1*np.ones(X_fraud.shape[0])]
     full_model_preds = model(torch.tensor(X_fraud_with_y).float())
     full_model_rounded = torch.round(full_model_preds[:, -1])
     print(f"Full model classification accuracy on fraud points: {torch.sum(full_model_rounded==1).item()}")
 
-    fraud_rest = torch.tensor(X_fraud[0 : num_fraud_keep, :]).float()
+    # I know there are like 10 points but otherwise we are eval on training points which is just bad
+    fraud_rest = torch.tensor(X_fraud[num_fraud_keep:, :]).float()
     non_fraud_model_pred = not_fraud_model(fraud_rest)
     non_fraud_MSE = torch.sum((fraud_rest - non_fraud_model_pred)**2, 1)
 
@@ -160,7 +173,4 @@ if __name__ == "__main__":
             correct += 1 
 
     # print(f"Non fraud test classification: {correct/n}")
-
-    # TODO: do for test points
-    test_is_fraud_df = df_test[df_test["IsFraud"] == 1]
 

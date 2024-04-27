@@ -9,13 +9,19 @@ from auto_encoder import AutoEncoder
 def create_random(n):
     return torch.tensor(np.random.normal(loc = 0, scale = 1, size = n)).float()
 
+def mask_index(arr, idxs, val):
+    mask_arr = arr.clone()
+    mask_arr[:, idxs] = val
+    return mask_arr
+
 # Masking df with given value 
-def mask_features(df, n, value, random):
+def mask_features(df, n, value, random, avoid_last=False):
     df_copy = df.clone()
     
     for index, row in enumerate(df_copy):
-        
-        idx = torch.randperm(row.size(0))[:n]
+        valid_idxs = row.size(0)-1 if avoid_last else row.size(0)
+
+        idx = torch.randperm(valid_idxs)[:n]
         # print("index: " + str(idx))
         if random == True:
             row[idx] = create_random(n = n)
