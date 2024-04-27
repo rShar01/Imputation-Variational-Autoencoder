@@ -4,6 +4,7 @@ import numpy as np
 
 import argparse
 
+from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from auto_encoder import AutoEncoder
 from training_utils import train, mask_features, mask_index
@@ -13,18 +14,24 @@ def parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs", action="store_true", default=False)
     parser.add_argument("--display_errors", action="store_true", default=False)
+    parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--latent_dim", type=int, default=10)
+    parser.add_argument("--num_masked", type=int, default=5)
+    parser.add_argument("--csv_loc", type=str, default=None, help="Save data as a row in a csv")
 
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parser()
-    # torch.manual_seed(42)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    
     # -- hyperparams -- 
-    latent_dim = 10
-    epochs = 10
+    latent_dim = args.latent_dim
+    epochs = args.epochs 
 
     df = pd.read_csv("data/credit-card-train.csv")
-    df_test = pd.read_csv("data/credit-card-test.csv")
     df.reset_index(drop=True, inplace=True)
     exclude_columns = ["id", "Time", "Transaction_Amount"]
     df.drop(exclude_columns, inplace=True, axis=1)
@@ -32,7 +39,7 @@ if __name__ == "__main__":
     n,d = df.shape
     df = df.sample(n=n) 
 
-    num_masked_feat = 5
+    num_masked_feat = args.num_masked 
     # mask_idx = [3, 8] # arbitrary, maybe change in experiments?
     mask_idx = torch.randperm(d-1)[:num_masked_feat]
 
@@ -40,8 +47,8 @@ if __name__ == "__main__":
     all_feat_train_df = df.copy()
     all_feat_train_df["IsFraud"] = -1
     all_feat_train_tens = torch.tensor(all_feat_train_df.to_numpy()).float()
-    # masked_all_feat_train = mask_features(all_feat_train_tens, num_masked_feat, 0, False, avoid_last=True)
-    masked_all_feat_train = mask_index(all_feat_train_tens, mask_idx, 0)
+    masked_all_feat_train = mask_features(all_feat_train_tens, num_masked_feat, 0, False, avoid_last=True)
+    # masked_all_feat_train = mask_index(all_feat_train_tens, mask_idx, 0)
 
     real_data = torch.tensor(df.iloc[:1000].to_numpy()).float()
 
@@ -88,11 +95,11 @@ if __name__ == "__main__":
     X_not_fraud = X[not_fraud_idx]
 
     X_fraud_tensor = torch.tensor(X_fraud[:num_fraud_keep]).float()
-    masked_fraud_tens = mask_index(X_fraud_tensor, mask_idx, 0)
-    # masked_fraud_tens = mask_features(X_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
+    # masked_fraud_tens = mask_index(X_fraud_tensor, mask_idx, 0)
+    masked_fraud_tens = mask_features(X_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
     X_not_fraud_tensor = torch.tensor(X_not_fraud[:num_not_fraud_keep]).float()
-    masked_not_fraud_tens = mask_index(X_not_fraud_tensor, mask_idx, 0)
-    # masked_not_fraud_tens = mask_features(X_not_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
+    # masked_not_fraud_tens = mask_index(X_not_fraud_tensor, mask_idx, 0)
+    masked_not_fraud_tens = mask_features(X_not_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
 
     fraud_model = AutoEncoder(input_dim, latent_dim)
     # initialize_weights(fraud_model)
@@ -139,7 +146,8 @@ if __name__ == "__main__":
     X_fraud_with_y = np.c_[X_fraud, -1*np.ones(X_fraud.shape[0])]
     full_model_preds = model(torch.tensor(X_fraud_with_y).float())
     full_model_rounded = torch.round(full_model_preds[:, -1])
-    print(f"Full model classification accuracy on fraud points: {torch.sum(full_model_rounded==1).item()}")
+    full_model_right_fraud_preds = torch.sum(full_model_rounded==1).item() 
+    print(f"Full model classification num on fraud points: {full_model_right_fraud_preds}")
 
     # I know there are like 10 points but otherwise we are eval on training points which is just bad
     fraud_rest = torch.tensor(X_fraud[num_fraud_keep:, :]).float()
@@ -155,7 +163,8 @@ if __name__ == "__main__":
         if non_fraud_MSE[i] > fraud_MSE[i]:
             correct += 1
     
-    print(f"Paired Discriminating VAE classification accuracy on fraud: {correct/n}")
+    pair_discrim_accuracy = correct/n
+    print(f"Paired Discriminating VAE classification accuracy on fraud: {pair_discrim_accuracy}")
 
     # non fraud
     non_fraud_set = torch.tensor(X_not_fraud[num_not_fraud_keep:num_not_fraud_keep+100]).float()
@@ -173,4 +182,12 @@ if __name__ == "__main__":
             correct += 1 
 
     # print(f"Non fraud test classification: {correct/n}")
+    if args.csv_loc is not None:
+        csv_path = Path(args.csv_loc)
+        if not csv_path.is_file():
+            with open(csv_path, 'w') as f:
+                f.write("seed, epochs, latentDim, numMasked, fullModelPredNum, pairModelAccuracy\n")
+
+        with open(csv_path, 'a') as f:
+            f.write(f"{args.seed}, {epochs}, {latent_dim}, {num_masked_feat}, {full_model_right_fraud_preds}, {pair_discrim_accuracy}\n")
 
