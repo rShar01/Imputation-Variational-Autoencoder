@@ -37,29 +37,38 @@ if __name__ == "__main__":
     n,d = df.shape
     df = df.sample(n=n) 
     df.fillna(0, inplace=True) # may need to change value
+    print(df.describe())
+
+    legendary_column = df['is_legendary'] # just so we dont normalise the class column
+
+    scalar = StandardScaler()
+    x = scalar.fit_transform(df)
+    df = pd.DataFrame(x, columns=df.columns)
+    df["is_legendary"] = legendary_column
+    print(df)
 
     num_masked_feat = args.num_masked 
     # mask_idx = [3, 8] # arbitrary, maybe change in experiments?
     mask_idx = torch.randperm(d-1)[:num_masked_feat]
 
     # train on all features
-    all_feat_train_df = df.copy()
+    all_feat_train_df = df.copy().iloc[:500]
     all_feat_train_df["is_legendary"] = -1
     all_feat_train_tens = torch.tensor(all_feat_train_df.to_numpy()).float()
     masked_all_feat_train = mask_features(all_feat_train_tens, num_masked_feat, 0, False, avoid_last=True)
     # masked_all_feat_train = mask_index(all_feat_train_tens, mask_idx, 0)
 
-    real_data = torch.tensor(df.iloc[:1000].to_numpy()).float()
+    real_data = torch.tensor(df.iloc[:500].to_numpy()).float()
 
     model = AutoEncoder(d, latent_dim)
     # with torch.no_grad():
     #     initialize_weights(model)
 
-    model = train(model, masked_all_feat_train, real_data, epochs=epochs, max_N=2000)
+    model = train(model, masked_all_feat_train, real_data, epochs=epochs)
 
-    eval_num = 100
+    eval_num = 25
     correct = 0
-    eval_points = df.iloc[1000:1000+eval_num].copy().to_numpy()
+    eval_points = df.iloc[500:500+eval_num].copy().to_numpy()
 
     for i in range(eval_num):
         # whichever point achieves
@@ -83,12 +92,13 @@ if __name__ == "__main__":
     # Train by seperating ys
     y = df["is_legendary"].to_numpy()
     X = df.drop(columns=["is_legendary"]).to_numpy()
+    print(X)
     n, input_dim = X.shape
 
     is_fraud_idx = y == 1
     not_fraud_idx = y == 0
-    num_fraud_keep = 250
-    num_not_fraud_keep = 1000
+    num_fraud_keep = 10
+    num_not_fraud_keep = 300
 
     X_fraud = X[is_fraud_idx]
     X_not_fraud = X[not_fraud_idx]
@@ -96,6 +106,7 @@ if __name__ == "__main__":
     X_fraud_tensor = torch.tensor(X_fraud[:num_fraud_keep]).float()
     # masked_fraud_tens = mask_index(X_fraud_tensor, mask_idx, 0)
     masked_fraud_tens = mask_features(X_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
+
     X_not_fraud_tensor = torch.tensor(X_not_fraud[:num_not_fraud_keep]).float()
     # masked_not_fraud_tens = mask_index(X_not_fraud_tensor, mask_idx, 0)
     masked_not_fraud_tens = mask_features(X_not_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
@@ -105,8 +116,8 @@ if __name__ == "__main__":
     not_fraud_model = AutoEncoder(input_dim, latent_dim)
     # initialize_weights(not_fraud_model)
 
-    fraud_model = train(fraud_model, masked_fraud_tens, X_fraud_tensor, epochs=epochs, max_N=250)
-    not_fraud_model = train(not_fraud_model, masked_not_fraud_tens, X_not_fraud_tensor, epochs=epochs, max_N=250)
+    fraud_model = train(fraud_model, masked_fraud_tens, X_fraud_tensor, epochs=epochs)
+    not_fraud_model = train(not_fraud_model, masked_not_fraud_tens, X_not_fraud_tensor, epochs=epochs)
 
     if args.display_errors:
         print("Evaluating not legendary reconstruction")
@@ -165,28 +176,28 @@ if __name__ == "__main__":
     pair_discrim_accuracy = correct/n
     print(f"Paired Discriminating VAE classification accuracy on legendary: {pair_discrim_accuracy}")
 
-    # non fraud
-    non_fraud_set = torch.tensor(X_not_fraud[num_not_fraud_keep:num_not_fraud_keep+100]).float()
+    # # non fraud
+    # non_fraud_set = torch.tensor(X_not_fraud[num_not_fraud_keep:num_not_fraud_keep+5]).float()
 
-    non_fraud_model_pred = not_fraud_model(non_fraud_set)
-    non_fraud_MSE = torch.sum((non_fraud_set - non_fraud_model_pred)**2, 1)
+    # non_fraud_model_pred = not_fraud_model(non_fraud_set)
+    # non_fraud_MSE = torch.sum((non_fraud_set - non_fraud_model_pred)**2, 1)
 
-    fraud_model_preds = fraud_model(non_fraud_set)
-    fraud_MSE = torch.sum((non_fraud_set - fraud_model_preds)**2, 1)
+    # fraud_model_preds = fraud_model(non_fraud_set)
+    # fraud_MSE = torch.sum((non_fraud_set - fraud_model_preds)**2, 1)
 
-    n = fraud_MSE.shape[0]
-    correct = 0
-    for i in range(n):
-        if non_fraud_MSE[i] < fraud_MSE[i]:
-            correct += 1 
+    # n = fraud_MSE.shape[0]
+    # correct = 0
+    # for i in range(n):
+    #     if non_fraud_MSE[i] < fraud_MSE[i]:
+    #         correct += 1 
 
-    # print(f"Non fraud test classification: {correct/n}")
-    if args.csv_loc is not None:
-        csv_path = Path(args.csv_loc)
-        if not csv_path.is_file():
-            with open(csv_path, 'w') as f:
-                f.write("seed, epochs, latentDim, numMasked, fullModelPredNum, pairModelAccuracy\n")
+    # # print(f"Non fraud test classification: {correct/n}")
+    # if args.csv_loc is not None:
+    #     csv_path = Path(args.csv_loc)
+    #     if not csv_path.is_file():
+    #         with open(csv_path, 'w') as f:
+    #             f.write("seed, epochs, latentDim, numMasked, fullModelPredNum, pairModelAccuracy\n")
 
-        with open(csv_path, 'a') as f:
-            f.write(f"{args.seed}, {epochs}, {latent_dim}, {num_masked_feat}, {full_model_right_fraud_preds}, {pair_discrim_accuracy}\n")
+    #     with open(csv_path, 'a') as f:
+    #         f.write(f"{args.seed}, {epochs}, {latent_dim}, {num_masked_feat}, {full_model_right_fraud_preds}, {pair_discrim_accuracy}\n")
 
