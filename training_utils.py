@@ -6,35 +6,35 @@ from tqdm import tqdm
 from auto_encoder import AutoEncoder
 
 # Creating random noise in a row
-def create_random(n):
-    return torch.tensor(np.random.normal(loc = 0, scale = 1, size = n)).float()
+def create_random(n, device='cpu'):
+    return torch.tensor(np.random.normal(loc = 0, scale = 1, size = n)).float().to(device)
 
-def mask_index(arr, idxs, val):
-    mask_arr = arr.clone()
+def mask_index(arr, idxs, val, device='cpu'):
+    mask_arr = arr.clone().to(device)
     mask_arr[:, idxs] = val
     return mask_arr
 
 # Masking df with given value 
-def mask_features(df, n, value, random, avoid_last=False):
-    df_copy = df.clone()
+def mask_features(tens, n, value, random, avoid_last=False, device='cpu'):
+    tens_copy = tens.clone().to(device)
     
-    for index, row in enumerate(df_copy):
+    for index, row in enumerate(tens_copy):
         valid_idxs = row.size(0)-1 if avoid_last else row.size(0)
 
         idx = torch.randperm(valid_idxs)[:n]
         # print("index: " + str(idx))
         if random == True:
-            row[idx] = create_random(n = n)
+            row[idx] = create_random(n = n, device=device)
         else: 
             row[idx] = value
         
-    return df_copy
+    return tens_copy
 
 # Training process
 # Trains on all points in masked_data + unmasked data unless max_N is specified
 def train(autoencoder: AutoEncoder, masked_data: pd.DataFrame, unmasaked_data: pd.DataFrame, epochs=100, max_N=None):
     opt = torch.optim.Adam(autoencoder.parameters())
-    batch_size = 200
+    batch_size = 20
     n, d = unmasaked_data.shape
 
     avg_los_epoch = []

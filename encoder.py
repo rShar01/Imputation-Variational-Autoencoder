@@ -35,6 +35,8 @@ class Encoder(nn.Module):
             )
 
         self.normal = dists.Normal(0,1)
+        # self.normal.loc = self.normal.loc.cuda() # hack to get sampling on the GPU
+        # self.normal.scale = self.normal.scale.cuda()
         self.kl = 0
 
     def forward(self, x):
@@ -49,7 +51,8 @@ class Encoder(nn.Module):
         mu = self.latent_mean(latents)
         sigma = self.latent_var(latents)
 
-        random_point = self.normal.sample(sample_shape=(n,self.out))
+        # random_point = self.normal.sample(sample_shape=(n,self.out))
+        random_point = self.normal.sample(mu.shape)
         z = mu + sigma*random_point
         # self.kl += (sigma**2 + mu**2 - tlog(sigma) - 1/2).sum()
         # self.kl += (1 - sigma**2 - mu**2 + tlog(sigma)**2).sum()

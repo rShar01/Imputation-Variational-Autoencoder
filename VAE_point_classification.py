@@ -26,7 +26,8 @@ if __name__ == "__main__":
     args = parser()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
     # -- hyperparams -- 
     latent_dim = args.latent_dim
     epochs = args.epochs 
@@ -44,15 +45,16 @@ if __name__ == "__main__":
     mask_idx = torch.randperm(d-1)[:num_masked_feat]
 
     # train on all features
-    all_feat_train_df = df.copy()
+    all_feat_train_df = df.copy().iloc[:1000]
     all_feat_train_df["IsFraud"] = -1
-    all_feat_train_tens = torch.tensor(all_feat_train_df.to_numpy()).float()
-    masked_all_feat_train = mask_features(all_feat_train_tens, num_masked_feat, 0, False, avoid_last=True)
-    # masked_all_feat_train = mask_index(all_feat_train_tens, mask_idx, 0)
+    all_feat_train_tens = torch.tensor(all_feat_train_df.to_numpy()).to(device).float()
+    masked_all_feat_train = mask_features(all_feat_train_tens, num_masked_feat, 0, True, avoid_last=True, device=device)
 
-    real_data = torch.tensor(df.iloc[:1000].to_numpy()).float()
+    # masked_all_feat_train = mask_index(all_feat_train_tens, mask_idx, 0, device=device)
 
-    model = AutoEncoder(d, latent_dim)
+    real_data = torch.tensor(df.iloc[:1000].to_numpy()).to(device).float()
+
+    model = AutoEncoder(d, latent_dim).to(device)
     # with torch.no_grad():
     #     initialize_weights(model)
 
@@ -67,7 +69,7 @@ if __name__ == "__main__":
         point = eval_points[i]
         original = point[-1]
         point[-1] = -1
-        point = torch.tensor(point).float()
+        point = torch.tensor(point).to(device).float()
         point = point.reshape(1, d)
         
         x_hat = model(point)
@@ -94,16 +96,16 @@ if __name__ == "__main__":
     X_fraud = X[is_fraud_idx]
     X_not_fraud = X[not_fraud_idx]
 
-    X_fraud_tensor = torch.tensor(X_fraud[:num_fraud_keep]).float()
-    # masked_fraud_tens = mask_index(X_fraud_tensor, mask_idx, 0)
-    masked_fraud_tens = mask_features(X_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
-    X_not_fraud_tensor = torch.tensor(X_not_fraud[:num_not_fraud_keep]).float()
-    # masked_not_fraud_tens = mask_index(X_not_fraud_tensor, mask_idx, 0)
-    masked_not_fraud_tens = mask_features(X_not_fraud_tensor, num_masked_feat, 0, False, avoid_last=False)
+    X_fraud_tensor = torch.tensor(X_fraud[:num_fraud_keep]).float().to(device)
+    # masked_fraud_tens = mask_index(X_fraud_tensor, mask_idx, 0, device=device)
+    masked_fraud_tens = mask_features(X_fraud_tensor, num_masked_feat, 0, True, avoid_last=False, device=device)
+    X_not_fraud_tensor = torch.tensor(X_not_fraud[:num_not_fraud_keep]).float().to(device)
+    # masked_not_fraud_tens = mask_index(X_not_fraud_tensor, mask_idx, 0, device=device)
+    masked_not_fraud_tens = mask_features(X_not_fraud_tensor, num_masked_feat, 0, True, avoid_last=False, device=device)
 
-    fraud_model = AutoEncoder(input_dim, latent_dim)
+    fraud_model = AutoEncoder(input_dim, latent_dim).to(device)
     # initialize_weights(fraud_model)
-    not_fraud_model = AutoEncoder(input_dim, latent_dim)
+    not_fraud_model = AutoEncoder(input_dim, latent_dim).to(device)
     # initialize_weights(not_fraud_model)
 
     fraud_model = train(fraud_model, masked_fraud_tens, X_fraud_tensor, epochs=epochs, max_N=250)
@@ -112,7 +114,7 @@ if __name__ == "__main__":
     if args.display_errors:
         print("Evaluating non fraud reconstruction")
         for i in range(3):
-            point = torch.tensor(X_not_fraud[num_not_fraud_keep+i]).float()
+            point = torch.tensor(X_not_fraud[num_not_fraud_keep+i]).float().to(device)
             # print(point)
             # print(point.shape)
 
@@ -128,7 +130,7 @@ if __name__ == "__main__":
 
         print("Evaluating fraud reconstruction")
         for i in range(3):
-            point = torch.tensor(X_fraud[num_fraud_keep+i]).float()
+            point = torch.tensor(X_fraud[num_fraud_keep+i]).float().to(device)
 
             not_fraud_recon = not_fraud_model(point)
             not_fraud_loss = ((not_fraud_recon - point)**2).sum()
@@ -144,13 +146,13 @@ if __name__ == "__main__":
     # --  fraud cases --
     # eval full model, fuck it try on every point
     X_fraud_with_y = np.c_[X_fraud, -1*np.ones(X_fraud.shape[0])]
-    full_model_preds = model(torch.tensor(X_fraud_with_y).float())
+    full_model_preds = model(torch.tensor(X_fraud_with_y).to(device).float())
     full_model_rounded = torch.round(full_model_preds[:, -1])
     full_model_right_fraud_preds = torch.sum(full_model_rounded==1).item() 
     print(f"Full model classification num on fraud points: {full_model_right_fraud_preds}")
 
     # I know there are like 10 points but otherwise we are eval on training points which is just bad
-    fraud_rest = torch.tensor(X_fraud[num_fraud_keep:, :]).float()
+    fraud_rest = torch.tensor(X_fraud[num_fraud_keep:, :]).to(device).float()
     non_fraud_model_pred = not_fraud_model(fraud_rest)
     non_fraud_MSE = torch.sum((fraud_rest - non_fraud_model_pred)**2, 1)
 
@@ -167,7 +169,7 @@ if __name__ == "__main__":
     print(f"Paired Discriminating VAE classification accuracy on fraud: {pair_discrim_accuracy}")
 
     # non fraud
-    non_fraud_set = torch.tensor(X_not_fraud[num_not_fraud_keep:num_not_fraud_keep+100]).float()
+    non_fraud_set = torch.tensor(X_not_fraud[num_not_fraud_keep:num_not_fraud_keep+100]).to(device).float()
 
     non_fraud_model_pred = not_fraud_model(non_fraud_set)
     non_fraud_MSE = torch.sum((non_fraud_set - non_fraud_model_pred)**2, 1)
