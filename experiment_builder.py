@@ -10,5 +10,5 @@ out = "rand_mask_label_pred_results.csv"
 
 with open("experiment.bash", 'w') as f:
     for seed, ep, lat, num_mask in product(seed_vals, epochs, latents, num_masked):
-        f.write(f"!python3 VAE_point_classification.py --seed {seed} --epochs {ep} --latent_dim {lat} --num_masked {num_mask} --csv_loc {out}\n")
+        f.write(f"python3 VAE_point_classification.py --seed {seed} --epochs {ep} --latent_dim {lat} --num_masked {num_mask} --csv_loc {out}\n")
 

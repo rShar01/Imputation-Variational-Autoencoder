@@ -35,8 +35,8 @@ class Encoder(nn.Module):
             )
 
         self.normal = dists.Normal(0,1)
-        # self.normal.loc = self.normal.loc.cuda() # hack to get sampling on the GPU
-        # self.normal.scale = self.normal.scale.cuda()
+        self.normal.loc = self.normal.loc.cuda() # hack to get sampling on the GPU
+        self.normal.scale = self.normal.scale.cuda()
         self.kl = 0
 
     def forward(self, x):
